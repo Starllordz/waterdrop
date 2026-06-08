@@ -23,8 +23,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Set up ffmpeg
+      # setup-ffmpeg only supports x64; macos-latest is arm64, so use Homebrew there.
+      - name: Set up ffmpeg (Linux/Windows)
+        if: runner.os != 'macOS'
         uses: FedericoCarboni/setup-ffmpeg@v3
+
+      - name: Set up ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
 
       - name: Install dependencies
         run: pip install -r requirements.txt
