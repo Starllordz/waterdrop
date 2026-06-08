@@ -16,21 +16,25 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
-      # setup-ffmpeg only supports x64; macos-latest is arm64, so use Homebrew there.
-      - name: Set up ffmpeg (Linux/Windows)
-        if: runner.os != 'macOS'
-        uses: FedericoCarboni/setup-ffmpeg@v3
-
-      - name: Set up ffmpeg (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ffmpeg
+      # Install ffmpeg via each OS's package manager (no third-party action,
+      # works on arm64 macOS too).
+      - name: Set up ffmpeg
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ffmpeg
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew install ffmpeg
+          else
+            choco install ffmpeg -y --no-progress
+          fi
 
       - name: Install dependencies
         run: pip install -r requirements.txt
