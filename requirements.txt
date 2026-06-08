@@ -1,0 +1,9 @@
+# Waterdrop runtime dependencies.
+#
+# send2trash gives a recoverable Trash on every OS (Recycle Bin on Windows,
+# XDG trash on Linux, Trash on macOS). Without it, Waterdrop still works:
+# macOS/Linux use a built-in fallback, and permanent delete always works.
+send2trash>=1.8
+
+# Optional: lighter image thumbnails. Waterdrop serves originals if it's absent.
+# Pillow>=10

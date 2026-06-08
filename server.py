@@ -1,34 +1,29 @@
 #!/usr/bin/env python3
 """
-Waterdrop — local web server (Python standard library only).
+Waterdrop — local web server.
 
 Serves a small single-page UI to find and remove duplicate photos/videos
-between two folders. It drives `czkawka_cli` for scanning, macOS `osascript`
-for the native folder picker, `qlmanage` for universal thumbnails (images and
-videos), and moves deleted files to the macOS Trash.
+between two folders. It drives `czkawka_cli` for scanning; all OS-specific
+behaviour (folder picker, thumbnails, media metadata, Trash) is delegated to
+`platform_tools`, so the same code runs on macOS, Windows and Linux.
 
 Run:  python3 server.py      (then open the printed URL)
 """
 
-import hashlib
 import json
 import mimetypes
 import os
-import shutil
 import socket
-import subprocess
-import tempfile
 import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 import scanner
+import platform_tools
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(HERE, "static")
-THUMB_CACHE = os.path.join(tempfile.gettempdir(), "waterdrop_thumbs")
-os.makedirs(THUMB_CACHE, exist_ok=True)
 
 # Extra MIME types not always known to the stdlib.
 mimetypes.add_type("image/webp", ".webp")
@@ -78,125 +73,12 @@ def summarize(groups):
     return {"counts": counts, "recoverable": recoverable, "groups": len(groups)}
 
 
-def pick_folder():
-    """Show the native macOS 'choose folder' dialog; return path or None."""
-    script = 'POSIX path of (choose folder with prompt "Select a folder")'
-    proc = subprocess.run(
-        ["osascript", "-e", script], capture_output=True, text=True, check=False
-    )
-    if proc.returncode != 0:
-        return None  # user cancelled
-    return proc.stdout.strip().rstrip("/") or "/"
-
-
-def make_thumbnail(path):
-    """Generate (and cache) a Quick Look thumbnail PNG. Returns a file path.
-
-    Falls back to the original file for images if Quick Look produces nothing.
-    """
-    mtime = os.path.getmtime(path)
-    key = hashlib.sha1(f"{path}:{mtime}".encode()).hexdigest()
-    cached = os.path.join(THUMB_CACHE, key + ".png")
-    if os.path.exists(cached):
-        return cached, "image/png"
-
-    out_dir = tempfile.mkdtemp(prefix="ql_", dir=THUMB_CACHE)
-    try:
-        subprocess.run(
-            ["qlmanage", "-t", "-s", "640", "-o", out_dir, path],
-            capture_output=True, text=True, check=False, timeout=20,
-        )
-        produced = [f for f in os.listdir(out_dir) if f.lower().endswith(".png")]
-        if produced:
-            shutil.move(os.path.join(out_dir, produced[0]), cached)
-            return cached, "image/png"
-    except subprocess.TimeoutExpired:
-        pass
-    finally:
-        shutil.rmtree(out_dir, ignore_errors=True)
-
-    # Fallback: serve the original bytes for images (browsers render them).
-    if scanner.kind_of(path) == "image":
-        ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
-        return path, ctype
-    return None, None
-
-
-INFO_CACHE = {}
-INFO_LOCK = threading.Lock()
-
-
-def get_media_info(path):
-    """Return resolution/quality metadata for an image or video file.
-
-    Uses `sips` for images and `ffprobe` for videos (both already available on
-    macOS once ffmpeg is installed). Results are cached by path + mtime.
-    """
-    mtime = os.path.getmtime(path)
-    cache_key = (path, mtime)
-    with INFO_LOCK:
-        if cache_key in INFO_CACHE:
-            return INFO_CACHE[cache_key]
-
-    kind = scanner.kind_of(path)
-    info = {"kind": kind, "size": os.path.getsize(path),
-            "width": 0, "height": 0, "duration": 0, "bitrate": 0}
-
-    if kind == "image":
-        proc = subprocess.run(
-            ["sips", "-g", "pixelWidth", "-g", "pixelHeight", path],
-            capture_output=True, text=True, check=False,
-        )
-        for line in proc.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("pixelWidth:"):
-                info["width"] = int(line.split(":")[1].strip() or 0)
-            elif line.startswith("pixelHeight:"):
-                info["height"] = int(line.split(":")[1].strip() or 0)
-    else:
-        proc = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-show_entries", "format=duration,bit_rate",
-             "-of", "json", path],
-            capture_output=True, text=True, check=False,
-        )
-        try:
-            data = json.loads(proc.stdout or "{}")
-            stream = (data.get("streams") or [{}])[0]
-            fmt = data.get("format") or {}
-            info["width"] = int(stream.get("width") or 0)
-            info["height"] = int(stream.get("height") or 0)
-            info["duration"] = float(fmt.get("duration") or 0)
-            info["bitrate"] = int(fmt.get("bit_rate") or 0)
-        except (json.JSONDecodeError, ValueError, IndexError):
-            pass
-
-    with INFO_LOCK:
-        INFO_CACHE[cache_key] = info
-    return info
-
-
-def move_to_trash(path):
-    """Move a file into the macOS Trash (~/.Trash), recoverable.
-
-    Done with a plain filesystem move — NOT AppleScript/Finder — so it is
-    instant and never triggers a macOS automation-permission prompt (which,
-    if hidden behind the app window, would make deletion appear to hang).
-    Returns True on success.
-    """
-    try:
-        trash = os.path.expanduser("~/.Trash")
-        os.makedirs(trash, exist_ok=True)
-        base = os.path.basename(path)
-        target = os.path.join(trash, base)
-        if os.path.exists(target):
-            stem, ext = os.path.splitext(base)
-            target = os.path.join(trash, f"{stem} {uuid.uuid4().hex[:6]}{ext}")
-        shutil.move(path, target)
-        return True
-    except OSError:
-        return False
+# Folder picker, thumbnails, media metadata and Trash are all OS-specific and
+# live in platform_tools (which falls back gracefully across macOS/Windows/Linux).
+pick_folder = platform_tools.pick_folder
+make_thumbnail = platform_tools.make_thumbnail
+get_media_info = platform_tools.get_media_info
+move_to_trash = platform_tools.move_to_trash
 
 
 def delete_many(paths, permanent):
@@ -321,6 +203,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/":
             return self.serve_static("index.html")
+        if path == "/api/capabilities":
+            return self.send_json({"trash": platform_tools.trash_supported()})
         if path.startswith("/static/"):
             return self.serve_static(path[len("/static/"):])
         if path.startswith("/api/scan/"):
@@ -366,7 +250,12 @@ class Handler(BaseHTTPRequestHandler):
     def handle_scan_start(self):
         if not scanner.czkawka_available():
             return self.send_json(
-                {"error": "czkawka_cli not found. Install with: brew install czkawka ffmpeg"},
+                {"error": f"czkawka_cli not found. {platform_tools.install_hint()}"},
+                status=400,
+            )
+        if not platform_tools.ffprobe_available():
+            return self.send_json(
+                {"error": f"ffmpeg/ffprobe not found. {platform_tools.install_hint()}"},
                 status=400,
             )
         body = self.read_body()

@@ -125,6 +125,28 @@ function refreshStartButton() {
   $("#startScan").disabled = !(a && b);
 }
 
+// The folder fields are also editable: typing/pasting a path works everywhere,
+// including systems where no native folder dialog is available.
+["folderA", "folderB"].forEach((id) =>
+  $("#" + id).addEventListener("input", refreshStartButton)
+);
+
+// Ask the server what it supports. If a recoverable Trash isn't available on
+// this system, force permanent delete and explain why.
+api("/api/capabilities").then((caps) => {
+  if (caps && caps.trash === false) {
+    const cb = $("#permanent");
+    cb.checked = true;
+    cb.disabled = true;
+    state.permanent = true;
+    const label = document.querySelector(".switch-label");
+    if (label) {
+      label.innerHTML =
+        'Delete permanently <span class="hint">(Trash not available on this system)</span>';
+    }
+  }
+}).catch(() => {});
+
 // Range sliders -> live output
 for (const id of ["imageThreshold", "videoTolerance"]) {
   const input = $("#" + id);

@@ -13,8 +13,8 @@ Only groups that span BOTH folders are returned (the user's goal: dedupe across
 the two folders). Similar groups whose files are all already byte-identical are
 dropped to avoid double-reporting.
 
-No third-party dependencies: only the Python standard library plus the
-`czkawka_cli` binary (install with `brew install czkawka ffmpeg`).
+Requires the `czkawka_cli` and `ffmpeg`/`ffprobe` binaries on PATH (cross-platform).
+See the README for per-OS install instructions.
 """
 
 import json
