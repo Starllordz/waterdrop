@@ -19,6 +19,7 @@ import threading
 import uuid
 
 import scanner
+import tools
 
 IS_MAC = sys.platform == "darwin"
 IS_WINDOWS = os.name == "nt"
@@ -45,11 +46,11 @@ def _run(cmd, **kwargs):
 # External tool availability
 # --------------------------------------------------------------------------- #
 def ffmpeg_available():
-    return shutil.which("ffmpeg") is not None
+    return tools.available("ffmpeg")
 
 
 def ffprobe_available():
-    return shutil.which("ffprobe") is not None
+    return tools.available("ffprobe")
 
 
 def install_hint():
@@ -139,7 +140,7 @@ def _ffmpeg_thumbnail(path, out_png):
     # Seek ~1s in for a representative frame; retry at the start for short clips.
     for seek in ("1", "0"):
         try:
-            _run(["ffmpeg", "-y", "-ss", seek, "-i", path,
+            _run([tools.resolve("ffmpeg"), "-y", "-ss", seek, "-i", path,
                   "-frames:v", "1", "-vf", "scale=640:-1", tmp], timeout=20)
         except subprocess.TimeoutExpired:
             continue
@@ -194,7 +195,7 @@ def get_media_info(path):
 
     if ffprobe_available():
         proc = _run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+            [tools.resolve("ffprobe"), "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=width,height",
              "-show_entries", "format=duration,bit_rate",
              "-of", "json", path],

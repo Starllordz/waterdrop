@@ -10,5 +10,8 @@ dist/
 venv/
 env/
 
+# Bundled binaries fetched for standalone builds (scripts/fetch_tools.py)
+bin/
+
 # macOS
 .DS_Store

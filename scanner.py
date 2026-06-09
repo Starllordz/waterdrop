@@ -13,7 +13,8 @@ Only groups that span BOTH folders are returned (the user's goal: dedupe across
 the two folders). Similar groups whose files are all already byte-identical are
 dropped to avoid double-reporting.
 
-Requires the `czkawka_cli` and `ffmpeg`/`ffprobe` binaries on PATH (cross-platform).
+Requires the `czkawka_cli` and `ffmpeg`/`ffprobe` binaries — bundled in a
+standalone build, otherwise resolved from `bin/` or PATH (see `tools.py`).
 See the README for per-OS install instructions.
 """
 
@@ -23,6 +24,8 @@ import shutil
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+
+import tools
 
 # File extensions we treat as video; everything else handled is an image.
 VIDEO_EXTS = {
@@ -36,7 +39,7 @@ def video_probe(path):
     info = {"dimensions": "", "duration": 0.0}
     try:
         out = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+            [tools.resolve("ffprobe"), "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=width,height",
              "-show_entries", "format=duration", "-of", "json", path],
             capture_output=True, text=True, check=False, timeout=15,
@@ -108,8 +111,8 @@ def _refine_similar_videos(groups):
 
 
 def czkawka_available():
-    """Return True if the czkawka_cli binary is on PATH."""
-    return shutil.which("czkawka_cli") is not None
+    """Return True if the czkawka_cli binary is bundled or on PATH."""
+    return tools.available("czkawka_cli")
 
 
 def kind_of(path):
@@ -124,7 +127,7 @@ def _run_czkawka(args, json_path):
     informational messages. Returns the parsed JSON, or an empty container when
     nothing was found / the file was not produced.
     """
-    cmd = ["czkawka_cli", *args, "-C", json_path, "-W", "-M"]
+    cmd = [tools.resolve("czkawka_cli"), *args, "-C", json_path, "-W", "-M"]
     subprocess.run(cmd, capture_output=True, text=True, check=False)
     if not os.path.exists(json_path) or os.path.getsize(json_path) == 0:
         return None

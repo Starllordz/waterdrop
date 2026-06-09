@@ -18,7 +18,22 @@ delete the copy you don't want from either folder — by default it goes to the
 Everything runs locally in your browser, served by a small Python web server.
 No data ever leaves your machine.
 
+## Get Waterdrop
+
+There are two ways to run it:
+
+- **Standalone app (nothing to install).** Download the build for your OS from
+  the [Releases](../../releases) page (or the **Build standalone** workflow's
+  artifacts), unzip, and run `Waterdrop`. Python, `ffmpeg`/`ffprobe` and
+  `czkawka_cli` are all bundled inside — no extra installs. Skip straight to
+  [How to use](#how-to-use).
+- **From source.** Lighter download, but you install the tools yourself — see
+  [Requirements](#requirements) below.
+
 ## Requirements
+
+> Only needed when **running from source**. The standalone app bundles all of
+> these.
 
 - **Python 3.8+**
 - **czkawka** (`czkawka_cli`) — the duplicate-detection engine
@@ -115,9 +130,32 @@ waterdrop/
   server.py          # local HTTP server: scan jobs, media, delete
   scanner.py         # drives czkawka_cli and normalizes results into pairs
   platform_tools.py  # OS-specific bits: folder picker, thumbnails, info, Trash
+  tools.py           # locates czkawka_cli/ffmpeg/ffprobe (bundle → bin/ → PATH)
   static/            # the web UI (index.html, style.css, app.js)
   start.command/.sh/.bat   # double-click launchers per OS
+  scripts/fetch_tools.py   # downloads the bundled binaries for the current OS
+  waterdrop.spec     # PyInstaller spec for the standalone build
 ```
+
+## Building the standalone app
+
+The standalone builds are produced by the **Build standalone** GitHub Actions
+workflow (`.github/workflows/build.yml`) for macOS, Windows and Linux, and
+uploaded as artifacts. To build one locally:
+
+```bash
+pip install pyinstaller -r requirements.txt
+python scripts/fetch_tools.py     # downloads ffmpeg/ffprobe/czkawka_cli into bin/
+pyinstaller waterdrop.spec        # → dist/Waterdrop/  (distribute the whole folder)
+```
+
+`tools.py` resolves each binary from the bundle first, then a local `bin/`
+folder, then the system PATH — so the same code runs packaged, from a `bin/`
+checkout, or against system installs.
+
+> **macOS note:** the bundled binaries are unsigned, so Gatekeeper may quarantine
+> a downloaded build. Clear it once with
+> `xattr -dr com.apple.quarantine /path/to/Waterdrop`, or right-click the app → **Open**.
 
 ## License
 
