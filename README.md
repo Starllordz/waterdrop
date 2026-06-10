@@ -291,9 +291,25 @@ waterdrop/
 
 The standalone builds are produced by the **Build standalone** GitHub Actions
 workflow (`.github/workflows/build.yml`) for **linux-x86_64**, **macos-arm64**
-and **windows-x86_64**, and uploaded as artifacts. It runs on demand
-(**workflow_dispatch**) and on version tags (`v*`). Binaries are **not** stored
-in the repo — the workflow downloads them per platform at build time.
+and **windows-x86_64**. It runs on demand (**workflow_dispatch**, producing a
+`0.0.0-dev.<sha>` package as artifacts) and on version tags (`v*`, which also
+publishes a **GitHub Release** with the zips attached). Binaries are **not**
+stored in the repo — the workflow downloads them per platform at build time.
+
+### Cutting a release
+
+Versioning is driven by the **git tag**. To publish `1.2.3`:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The workflow then stamps `1.2.3` into `version.py` (so the app reports its own
+version — shown in the header and on `/api/capabilities`), builds each OS,
+names the zips `Waterdrop-<platform>-1.2.3.zip`, and attaches them to a new
+release with auto-generated notes. `version.py` in the repo holds the
+development default between releases.
 
 To build one locally:
 

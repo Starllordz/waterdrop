@@ -27,7 +27,7 @@ a = Analysis(
     binaries=bin_files,
     datas=datas,
     # These are imported lazily / dynamically, so name them explicitly.
-    hiddenimports=["server", "scanner", "platform_tools", "tools", "send2trash"],
+    hiddenimports=["server", "scanner", "platform_tools", "tools", "version", "send2trash"],
     hookspath=[],
     runtime_hooks=[],
     excludes=["tkinter", "PyInstaller"],

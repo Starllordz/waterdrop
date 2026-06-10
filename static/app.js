@@ -134,6 +134,10 @@ function refreshStartButton() {
 // Ask the server what it supports. If a recoverable Trash isn't available on
 // this system, force permanent delete and explain why.
 api("/api/capabilities").then((caps) => {
+  if (caps && caps.version) {
+    const badge = $("#version");
+    if (badge) badge.textContent = "v" + caps.version;
+  }
   if (caps && caps.trash === false) {
     const cb = $("#permanent");
     cb.checked = true;

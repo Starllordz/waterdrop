@@ -59,6 +59,7 @@ body {
 .brand { display: flex; align-items: center; gap: 14px; }
 .logo { filter: drop-shadow(0 4px 8px rgba(14, 159, 212, .35)); }
 .topbar h1 { margin: 0; font-size: 23px; letter-spacing: -0.4px; font-weight: 800; }
+.version { font-size: 12px; font-weight: 600; color: var(--ink-soft); letter-spacing: 0; vertical-align: middle; }
 .tagline { margin: 2px 0 0; color: var(--ink-soft); font-size: 13px; }
 
 main { max-width: 1200px; margin: 0 auto; padding: 26px 22px 90px; }

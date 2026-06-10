@@ -1,8 +1,13 @@
 name: Build standalone
 
-# Builds self-contained Waterdrop executables (interpreter + ffmpeg/ffprobe +
-# czkawka_cli bundled, nothing for the user to install). Runs on demand and on
-# version tags; the per-OS apps are uploaded as workflow artifacts.
+# Builds self-contained Waterdrop apps (interpreter + ffmpeg/ffprobe +
+# czkawka_cli bundled, nothing for the user to install) for each OS, and
+# attaches the zips to a GitHub Release when a version tag is pushed.
+#
+# Versioning: the package version comes from the git tag. Push `vX.Y.Z` to cut a
+# release; the tag's number is stamped into version.py (so the app reports it),
+# used in the zip file names, and shown on the Release. Manual runs build a
+# `0.0.0-dev.<sha>` package for testing without releasing.
 on:
   workflow_dispatch:
   push:
@@ -31,6 +36,24 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-dev.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stamp version into the build
+        shell: bash
+        env:
+          V: ${{ steps.version.outputs.version }}
+        run: |
+          printf '"""Single source of truth for Waterdrop'\''s version."""\n\n__version__ = "%s"\n' "$V" > version.py
+          echo "Building version $V"
+
       - name: Install build dependencies
         run: pip install pyinstaller -r requirements.txt
 
@@ -40,9 +63,35 @@ jobs:
       - name: Build standalone app
         run: pyinstaller waterdrop.spec
 
+      - name: Package zip
+        shell: bash
+        env:
+          NAME: Waterdrop-${{ matrix.label }}-${{ steps.version.outputs.version }}
+        run: python -c "import shutil, os; shutil.make_archive(os.environ['NAME'], 'zip', 'dist', 'Waterdrop')"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Waterdrop-${{ matrix.label }}
-          path: dist/Waterdrop
+          name: Waterdrop-${{ matrix.label }}-${{ steps.version.outputs.version }}
+          path: Waterdrop-${{ matrix.label }}-${{ steps.version.outputs.version }}.zip
           if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
