@@ -181,6 +181,37 @@ def _is_cross_folder(files):
     return {f["side"] for f in files} == {"A", "B"}
 
 
+def _dedupe_identical(files, ident_set_of):
+    """Within a similar group, keep at most one file per byte-identical set.
+
+    czkawka's similarity scan can lump an exact-duplicate pair together with a
+    genuinely similar file. Two byte-identical files are the *same* content, so
+    listing both as "similar" just re-reports what the IDENTICAL results already
+    cover — and shows the same folder twice. We keep a single representative per
+    identical set, preferring one whose side keeps the group spanning both
+    folders (so the surviving similar relationship stays cross-folder).
+
+    Files with unique content (not byte-identical to anything) are always kept.
+    """
+    extras = [f for f in files if f["path"] not in ident_set_of]
+    kept = list(extras)
+    sides_needed = {"A", "B"} - {f["side"] for f in extras}
+    seen = set()
+    # Two passes: first take a representative on a still-missing side, then fill
+    # any remaining sets — so a set that can supply a missing folder does.
+    for prefer_missing in (True, False):
+        for f in files:
+            sid = ident_set_of.get(f["path"])
+            if sid is None or sid in seen:
+                continue
+            if prefer_missing and f["side"] not in sides_needed:
+                continue
+            kept.append(f)
+            seen.add(sid)
+            sides_needed.discard(f["side"])
+    return kept
+
+
 def scan(folder_a, folder_b, image_threshold=12, video_tolerance=10, progress=None):
     """Run all three scans and return normalized cross-folder duplicate groups.
 
@@ -219,12 +250,14 @@ def scan(folder_a, folder_b, image_threshold=12, video_tolerance=10, progress=No
         shutil.rmtree(tmp, ignore_errors=True)
 
     # --- normalize identical groups (certain duplicates) ---
+    # ident_set_of maps each file to the id of its byte-identical set, so similar
+    # groups can drop redundant copies of content already paired up as identical.
     identical_groups = []
-    identical_paths = set()
-    for group in _iter_dup_groups(dup_json):
+    ident_set_of = {}
+    for set_id, group in enumerate(_iter_dup_groups(dup_json)):
         files = [f for f in (_normalize_file(e, folder_a, folder_b) for e in group) if f]
         for f in files:
-            identical_paths.add(f["path"])
+            ident_set_of[f["path"]] = set_id
         if len(files) >= 2 and _is_cross_folder(files):
             identical_groups.append({"category": "IDENTICAL", "files": files})
 
@@ -232,12 +265,10 @@ def scan(folder_a, folder_b, image_threshold=12, video_tolerance=10, progress=No
         out = []
         for group in _iter_similar_groups(raw):
             files = [f for f in (_normalize_file(e, folder_a, folder_b) for e in group) if f]
-            if len(files) < 2 or not _is_cross_folder(files):
-                continue
-            # Skip groups whose files are all already reported as byte-identical.
-            if all(f["path"] in identical_paths for f in files):
-                continue
-            out.append({"category": category, "files": files})
+            # Collapse byte-identical copies so they aren't re-reported as similar.
+            files = _dedupe_identical(files, ident_set_of)
+            if len(files) >= 2 and _is_cross_folder(files):
+                out.append({"category": category, "files": files})
         return out
 
     image_groups = similar_groups(img_json, "SIMILAR_IMAGE")
