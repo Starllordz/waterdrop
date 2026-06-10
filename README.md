@@ -62,7 +62,7 @@ There are two ways to run it:
 
    | OS | How to launch |
    |----|---------------|
-   | **macOS** | Open the unzipped folder and run **`Waterdrop`**. The first time, **right-click → Open** to get past Gatekeeper (see [Troubleshooting](#troubleshooting)). |
+   | **macOS** | The app is unsigned, so macOS quarantines the download and refuses to open it. Clear the flag **once**, then run **`Waterdrop`** from the unzipped folder: `xattr -dr com.apple.quarantine /path/to/Waterdrop` (see [Troubleshooting](#troubleshooting) for a no-Terminal alternative). |
    | **Windows** | Open the unzipped folder and run **`Waterdrop.exe`**. If SmartScreen warns, click **More info → Run anyway**. |
    | **Linux** | Run **`./Waterdrop`** from the unzipped folder. |
 
@@ -241,7 +241,7 @@ Waterdrop is careful about deletion:
 |---------|-------------|
 | **"czkawka_cli not found"** when starting a scan (source install) | Install czkawka and make sure `czkawka_cli` is on your `PATH`. See [Requirements](#1-requirements). |
 | **"ffmpeg/ffprobe not found"** when starting a scan (source install) | Install ffmpeg (it provides `ffprobe`) and make sure both are on your `PATH`. |
-| **macOS: "Waterdrop can't be opened"** (standalone) | The bundled binaries are unsigned, so Gatekeeper quarantines the download. **Right-click the app → Open** once, or clear the flag: `xattr -dr com.apple.quarantine /path/to/Waterdrop`. |
+| **macOS: "Waterdrop can't be opened" / "Apple could not verify…"** (standalone) | The bundled binaries are unsigned, so Gatekeeper quarantines the download. Clearing the flag is the most reliable fix on every macOS version: `xattr -dr com.apple.quarantine /path/to/Waterdrop`. No-Terminal alternative: try to open it once, click **Done** (not "Move to Trash"), then go to **System Settings → Privacy & Security**, scroll to the message about Waterdrop and click **Open Anyway**. (On macOS 15 Sequoia and later the old *right-click → Open* shortcut no longer shows an Open button — use one of these instead.) |
 | **Windows: SmartScreen warning** (standalone) | The app is unsigned. Click **More info → Run anyway**. |
 | **Browse button does nothing** | No native folder dialog is available on your system — just **type or paste** the folder path into the field instead. |
 | **Trash toggle is forced on / "Trash not available"** | Your system has no recoverable Trash that Waterdrop can use (most often Windows without `send2trash`). Run `pip install send2trash`, or accept permanent delete. |
