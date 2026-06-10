@@ -43,7 +43,7 @@ MR_ARCH = "arm64" if IS_ARM else "amd64"
 
 def _get(url):
     """Download `url` and return its bytes (with a UA so GitHub is happy)."""
-    print(f"  ↓ {url}")
+    print(f"  -> {url}")
     req = urllib.request.Request(url, headers={"User-Agent": "waterdrop-build"})
     with urllib.request.urlopen(req, timeout=180) as resp:
         return resp.read()
@@ -59,7 +59,7 @@ def _write_binary(name, data):
         fh.write(data)
     mode = os.stat(dest).st_mode
     os.chmod(dest, mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    print(f"  ✓ {dest}  ({len(data):,} bytes)")
+    print(f"  [ok] {dest}  ({len(data):,} bytes)")
     return dest
 
 

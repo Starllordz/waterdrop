@@ -82,7 +82,21 @@ def run_in_process():
         httpd.shutdown()
 
 
+def _make_stdout_utf8():
+    """Avoid UnicodeEncodeError when printing non-ASCII on a Windows console.
+
+    A redirected stdout (or the cp1252 console) can't encode characters like the
+    💧 banner; reconfigure to UTF-8 and replace anything that still won't fit.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main():
+    _make_stdout_utf8()
     if FROZEN:
         return run_in_process()
 
