@@ -13,7 +13,8 @@ Only groups that span BOTH folders are returned (the user's goal: dedupe across
 the two folders). Similar groups whose files are all already byte-identical are
 dropped to avoid double-reporting.
 
-Requires the `czkawka_cli` and `ffmpeg`/`ffprobe` binaries on PATH (cross-platform).
+Requires the `czkawka_cli` and `ffmpeg`/`ffprobe` binaries — bundled in a
+standalone build, otherwise resolved from `bin/` or PATH (see `tools.py`).
 See the README for per-OS install instructions.
 """
 
@@ -23,6 +24,8 @@ import shutil
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+
+import tools
 
 # File extensions we treat as video; everything else handled is an image.
 VIDEO_EXTS = {
@@ -36,7 +39,7 @@ def video_probe(path):
     info = {"dimensions": "", "duration": 0.0}
     try:
         out = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+            [tools.resolve("ffprobe"), "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=width,height",
              "-show_entries", "format=duration", "-of", "json", path],
             capture_output=True, text=True, check=False, timeout=15,
@@ -108,8 +111,8 @@ def _refine_similar_videos(groups):
 
 
 def czkawka_available():
-    """Return True if the czkawka_cli binary is on PATH."""
-    return shutil.which("czkawka_cli") is not None
+    """Return True if the czkawka_cli binary is bundled or on PATH."""
+    return tools.available("czkawka_cli")
 
 
 def kind_of(path):
@@ -124,7 +127,7 @@ def _run_czkawka(args, json_path):
     informational messages. Returns the parsed JSON, or an empty container when
     nothing was found / the file was not produced.
     """
-    cmd = ["czkawka_cli", *args, "-C", json_path, "-W", "-M"]
+    cmd = [tools.resolve("czkawka_cli"), *args, "-C", json_path, "-W", "-M"]
     subprocess.run(cmd, capture_output=True, text=True, check=False)
     if not os.path.exists(json_path) or os.path.getsize(json_path) == 0:
         return None
@@ -178,6 +181,37 @@ def _is_cross_folder(files):
     return {f["side"] for f in files} == {"A", "B"}
 
 
+def _dedupe_identical(files, ident_set_of):
+    """Within a similar group, keep at most one file per byte-identical set.
+
+    czkawka's similarity scan can lump an exact-duplicate pair together with a
+    genuinely similar file. Two byte-identical files are the *same* content, so
+    listing both as "similar" just re-reports what the IDENTICAL results already
+    cover — and shows the same folder twice. We keep a single representative per
+    identical set, preferring one whose side keeps the group spanning both
+    folders (so the surviving similar relationship stays cross-folder).
+
+    Files with unique content (not byte-identical to anything) are always kept.
+    """
+    extras = [f for f in files if f["path"] not in ident_set_of]
+    kept = list(extras)
+    sides_needed = {"A", "B"} - {f["side"] for f in extras}
+    seen = set()
+    # Two passes: first take a representative on a still-missing side, then fill
+    # any remaining sets — so a set that can supply a missing folder does.
+    for prefer_missing in (True, False):
+        for f in files:
+            sid = ident_set_of.get(f["path"])
+            if sid is None or sid in seen:
+                continue
+            if prefer_missing and f["side"] not in sides_needed:
+                continue
+            kept.append(f)
+            seen.add(sid)
+            sides_needed.discard(f["side"])
+    return kept
+
+
 def scan(folder_a, folder_b, image_threshold=12, video_tolerance=10, progress=None):
     """Run all three scans and return normalized cross-folder duplicate groups.
 
@@ -216,12 +250,14 @@ def scan(folder_a, folder_b, image_threshold=12, video_tolerance=10, progress=No
         shutil.rmtree(tmp, ignore_errors=True)
 
     # --- normalize identical groups (certain duplicates) ---
+    # ident_set_of maps each file to the id of its byte-identical set, so similar
+    # groups can drop redundant copies of content already paired up as identical.
     identical_groups = []
-    identical_paths = set()
-    for group in _iter_dup_groups(dup_json):
+    ident_set_of = {}
+    for set_id, group in enumerate(_iter_dup_groups(dup_json)):
         files = [f for f in (_normalize_file(e, folder_a, folder_b) for e in group) if f]
         for f in files:
-            identical_paths.add(f["path"])
+            ident_set_of[f["path"]] = set_id
         if len(files) >= 2 and _is_cross_folder(files):
             identical_groups.append({"category": "IDENTICAL", "files": files})
 
@@ -229,12 +265,10 @@ def scan(folder_a, folder_b, image_threshold=12, video_tolerance=10, progress=No
         out = []
         for group in _iter_similar_groups(raw):
             files = [f for f in (_normalize_file(e, folder_a, folder_b) for e in group) if f]
-            if len(files) < 2 or not _is_cross_folder(files):
-                continue
-            # Skip groups whose files are all already reported as byte-identical.
-            if all(f["path"] in identical_paths for f in files):
-                continue
-            out.append({"category": category, "files": files})
+            # Collapse byte-identical copies so they aren't re-reported as similar.
+            files = _dedupe_identical(files, ident_set_of)
+            if len(files) >= 2 and _is_cross_folder(files):
+                out.append({"category": category, "files": files})
         return out
 
     image_groups = similar_groups(img_json, "SIMILAR_IMAGE")
@@ -243,4 +277,9 @@ def scan(folder_a, folder_b, image_threshold=12, video_tolerance=10, progress=No
     # Split noisy similar-video clusters by duration and add real resolution.
     video_groups = _refine_similar_videos(video_groups)
 
-    return identical_groups + image_groups + video_groups
+    groups = identical_groups + image_groups + video_groups
+    # Lay each group out canonically — Folder 1 (side A) before Folder 2 (side B),
+    # then by name — so the UI always shows folder 1 on the left, folder 2 right.
+    for g in groups:
+        g["files"].sort(key=lambda f: (f["side"], f["name"]))
+    return groups

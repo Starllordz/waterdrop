@@ -11,9 +11,15 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import webbrowser
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+# True when running inside a packaged standalone build (PyInstaller). In that
+# case there is no separate `python` to spawn server.py with, so we run the
+# server in-process instead.
+FROZEN = getattr(sys, "frozen", False)
 
 
 def open_browser(url):
@@ -51,7 +57,49 @@ def open_browser(url):
     webbrowser.open(url)
 
 
+def run_in_process():
+    """Standalone mode: start the server in a thread and open the browser.
+
+    Used when packaged (FROZEN), where there is no external Python interpreter
+    to launch server.py as a subprocess.
+    """
+    import server
+    from http.server import ThreadingHTTPServer
+
+    port = int(os.environ.get("WATERDROP_PORT") or server.find_free_port())
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), server.Handler)
+    url = f"http://127.0.0.1:{port}"
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+    open_browser(url)
+    print(f"\n💧 Waterdrop is running at {url}")
+    print("Close this window (or press Ctrl+C) to stop the app.")
+    try:
+        threading.Event().wait()  # block until interrupted
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.shutdown()
+
+
+def _make_stdout_utf8():
+    """Avoid UnicodeEncodeError when printing non-ASCII on a Windows console.
+
+    A redirected stdout (or the cp1252 console) can't encode characters like the
+    💧 banner; reconfigure to UTF-8 and replace anything that still won't fit.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main():
+    _make_stdout_utf8()
+    if FROZEN:
+        return run_in_process()
+
     server = subprocess.Popen(
         [sys.executable, os.path.join(HERE, "server.py")],
         cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

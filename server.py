@@ -21,6 +21,7 @@ from urllib.parse import urlparse, parse_qs
 
 import scanner
 import platform_tools
+from version import __version__
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(HERE, "static")
@@ -136,7 +137,7 @@ def run_scan_job(job_id, folder_a, folder_b, image_threshold, video_tolerance):
 # HTTP handler
 # --------------------------------------------------------------------------- #
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Waterdrop/1.0"
+    server_version = f"Waterdrop/{__version__}"
 
     def log_message(self, *args):
         pass  # keep the console quiet
@@ -204,7 +205,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/":
             return self.serve_static("index.html")
         if path == "/api/capabilities":
-            return self.send_json({"trash": platform_tools.trash_supported()})
+            return self.send_json({
+                "trash": platform_tools.trash_supported(),
+                "version": __version__,
+            })
         if path.startswith("/static/"):
             return self.serve_static(path[len("/static/"):])
         if path.startswith("/api/scan/"):
@@ -377,7 +381,7 @@ def main():
     port = int(os.environ.get("WATERDROP_PORT") or find_free_port())
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}"
-    print(f"Waterdrop running at {url}")
+    print(f"Waterdrop {__version__} running at {url}")
     print("Press Ctrl+C to stop.")
     # Let a launcher know which URL to open.
     print(f"WATERDROP_URL={url}", flush=True)
