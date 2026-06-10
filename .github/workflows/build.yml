@@ -6,10 +6,12 @@ name: Build standalone
 #
 # Versioning: the package version comes from the git tag. Push `vX.Y.Z` to cut a
 # release; the tag's number is stamped into version.py (so the app reports it),
-# used in the zip file names, and shown on the Release. Manual runs build a
-# `0.0.0-dev.<sha>` package for testing without releasing.
+# used in the zip file names, and shown on the Release. Pull requests and manual
+# runs build a `0.0.0-dev.<sha>` package (artifacts only, no release) so the full
+# packaging is validated before a tag is cut.
 on:
   workflow_dispatch:
+  pull_request:
   push:
     tags: ["v*"]
 
