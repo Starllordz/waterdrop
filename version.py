@@ -5,4 +5,4 @@ with the tag's version, so the packaged app reports the same number shown on the
 release and in the download's file name.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
