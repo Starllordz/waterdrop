@@ -277,4 +277,9 @@ def scan(folder_a, folder_b, image_threshold=12, video_tolerance=10, progress=No
     # Split noisy similar-video clusters by duration and add real resolution.
     video_groups = _refine_similar_videos(video_groups)
 
-    return identical_groups + image_groups + video_groups
+    groups = identical_groups + image_groups + video_groups
+    # Lay each group out canonically — Folder 1 (side A) before Folder 2 (side B),
+    # then by name — so the UI always shows folder 1 on the left, folder 2 right.
+    for g in groups:
+        g["files"].sort(key=lambda f: (f["side"], f["name"]))
+    return groups
